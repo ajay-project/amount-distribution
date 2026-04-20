@@ -1,0 +1,280 @@
+{
+  "_PURPOSE": "This file is a self-contained semantic map of the entire project. Any AI model reading only this file should be able to fully understand the application's purpose, architecture, data models, component responsibilities, user flows, key constraints, and relationships — without reading any source file.",
+
+  "project": {
+    "name": "Amount Distribution Simulator",
+    "version": "3.0 (Premium Edition)",
+    "owner": "Deepak Distribution Systems",
+    "description": "A React SPA (Single Page Application) that lets users assign monetary amounts to specific numbered boxes (1–100), then automatically generates N randomized 'folders' where each folder distributes the total assigned amount across a random selection of boxes. Outputs can be exported as TXT or PDF reports.",
+    "domain": "Financial / Distribution Simulation",
+    "language": "INR (Indian Rupee ₹)",
+    "currency_symbol": "₹",
+    "stack": {
+      "framework": "React 19",
+      "bundler": "Vite 8",
+      "styling": "Vanilla CSS with custom properties (no TailwindCSS, no CSS-in-JS)",
+      "pdf_export": "jsPDF ^4.2.1",
+      "node_version": ">=16"
+    },
+    "commands": {
+      "dev": "npm run dev  →  starts Vite dev server (default port 5174)",
+      "build": "npm run build  →  outputs optimized bundle to /dist",
+      "preview": "npm run preview  →  preview production build locally",
+      "lint": "npm run lint  →  ESLint with react-hooks + react-refresh plugins"
+    }
+  },
+
+  "core_concepts": {
+    "BOX": "One of 100 numbered slots (1–100). Each box can hold an assigned amount (₹). Visualized in a 10×10 grid.",
+    "BATCH": "A user-created grouping: one amount value assigned to one or more box numbers. Multiple batches can coexist. Each batch has a unique numeric ID (Date.now()). Batches are the source of truth for what goes into a folder.",
+    "FOLDER": "A generated distribution result. Each folder is a map of { boxNumber: amount } where the total across all entries equals the sum of all selected batch amounts. Boxes in a folder are randomly selected (min 5 boxes even if fewer assigned).",
+    "DISTRIBUTION": "The full array of all generated Folder objects. Created in a single generation run. Must be reset before batches can be edited.",
+    "REPORT": "The exportable output — either a plain-text summary or a structured PDF — listing all batch assignments and every folder's allocation details."
+  },
+
+  "data_models": {
+    "Batch": {
+      "shape": "{ id: Number, amount: Number, boxNumbers: Number[] }",
+      "id": "Timestamp (Date.now()) — unique identifier",
+      "amount": "Integer ₹ value assigned per box in this batch",
+      "boxNumbers": "Sorted array of box numbers (1–100) this batch covers",
+      "constraint": "A box number can only appear in ONE batch at a time. Cross-batch duplicates trigger a resolution dialog."
+    },
+    "DistributionFolder": {
+      "shape": "{ [boxNumber: string]: amount: Number }",
+      "description": "Plain object mapping box number strings to integer ₹ amounts",
+      "constraint": "Sum of all values == amountPerFolder (total of all selected batch amounts). Min 5 box entries per folder regardless of assigned box count."
+    },
+    "DuplicateModal": {
+      "shape": "{ boxNumber, currentAmount, newAmount, newBoxes, action }",
+      "description": "Transient state shown when a box being added already exists in another batch. Lets user choose 'Remove from other batch' or 'Proceed anyway'."
+    },
+    "Notification": {
+      "shape": "{ message: string, type: 'error'|'warning'|'success' }",
+      "description": "Ephemeral toast notification state — auto-dismissed by ErrorNotification component."
+    },
+    "ConfirmDialogState": {
+      "shape": "{ isOpen, title, message, confirmText, cancelText, onConfirm, onCancel, type }",
+      "description": "Generic dialog config. Type drives icon/color: warning=amber, error=red, info=blue, success=green."
+    }
+  },
+
+  "state_map": {
+    "owner": "AmountDistributionSimulator.jsx — the single source of truth for ALL app state",
+    "states": {
+      "batches": "Batch[] — all user-created amount assignments",
+      "distributions": "DistributionFolder[] — generated folder results (empty until generation)",
+      "numFolders": "Number — how many folders to generate",
+      "editingId": "Number|null — ID of batch currently being inline-edited",
+      "editAmount": "Number|string — draft amount value during edit",
+      "editBoxes": "string — draft comma-separated box numbers during edit",
+      "downloadFormat": "'txt'|'pdf' — user-chosen export format",
+      "duplicateModal": "DuplicateModal|null — conflict resolution modal state",
+      "selectedBatches": "Number[] — batch IDs selected for generation when >1 batch exists",
+      "showBatchSelector": "Boolean — shows multi-batch selection modal",
+      "showGridModal": "Boolean — shows the 10x10 box grid modal",
+      "showLoadingPopup": "Boolean — triggers 5-second animated loading sequence",
+      "pendingBatchData": "{ amount, boxNumbers }|null — batch held during loading animation",
+      "notification": "Notification|null — current toast message",
+      "confirmDialog": "ConfirmDialogState|null — current confirm dialog (defined but reset uses window.confirm directly)"
+    },
+    "derived": {
+      "boxMap": "getAllBoxes() → { [boxNum]: amount } — flat map of all assigned boxes across all batches",
+      "boxes": "Array(100) — index-based array where index+1 = box number, value = amount or null",
+      "assignedBoxes": "Count of boxes with non-null values",
+      "totalAmount": "Sum of (amount × boxCount) across all batches",
+      "amountPerFolder": "Same formula as totalAmount — used as the target sum per generated folder"
+    }
+  },
+
+  "distribution_algorithm": {
+    "trigger": "User clicks 'Generate Distribution' button",
+    "entry_function": "generateDistributionsFromBatches(batchIds)",
+    "steps": [
+      "1. Filter batches by selected batchIds, collect all box numbers (flatMap).",
+      "2. Compute totalBoxCount and amountPerFolder (sum of amount × boxCount per batch).",
+      "3. effectiveBoxCount = Math.max(totalBoxCount, 5)  → always use at least 5 boxes per folder.",
+      "4. For each of N folders:",
+      "   a. Pick effectiveBoxCount random unique box numbers from 1–100 (Fisher-Yates shuffle on full 100-array, slice first N).",
+      "   b. Distribute amountPerFolder across those boxes:",
+      "      - For each box except the last: pick randomAmount in range [1, max(1, remaining - remainingBoxes + 1)].",
+      "      - Last box receives the exact remainder to guarantee folder total = amountPerFolder.",
+      "   c. Build distribution object: { boxNum: amount }.",
+      "5. Set distributions state with the full array of folder objects."
+    ],
+    "key_constraint": "Each folder's box amounts must sum to exactly amountPerFolder. Guaranteed by assigning remainder to last box.",
+    "randomness": "Fisher-Yates shuffle. Math.floor(Math.random() * range) for individual amounts."
+  },
+
+  "component_graph": {
+    "nodes": [
+      {
+        "id": "main.jsx",
+        "role": "Entry Point",
+        "description": "Bootstraps React 19 with StrictMode. Mounts <App /> into #root. Imports global index.css."
+      },
+      {
+        "id": "App.jsx",
+        "role": "Layout Shell",
+        "description": "Renders the page skeleton: <Header /> → <main> → <AmountDistributionSimulator /> → <Footer />. Sets data-theme='light' on root div."
+      },
+      {
+        "id": "Header.jsx",
+        "role": "App Navigation Bar",
+        "description": "Sticky top bar with auto-hide on scroll-down (triggers after 80px scroll). Shows brand logo, title, and an info button that opens a How-To modal overlay explaining the 5-step usage flow."
+      },
+      {
+        "id": "AmountDistributionSimulator.jsx",
+        "role": "God Component / State Manager / Engine",
+        "description": "Owns ALL state. Contains the distribution algorithm, export logic (TXT + PDF via jsPDF), batch CRUD, duplicate resolution, and inline edit. Renders: hero header, grid-toggle bar, InputSection, batch list, stats cards, folder-generation controls, ResultsPanel, download controls, and all modal/overlay components.",
+        "key_handlers": {
+          "handleAssignAmount": "Validates input and checks for box duplicates before triggering LoadingPopup",
+          "handleLoadingComplete": "Fires after 5s animation — commits pendingBatchData to batches state",
+          "handleGenerateDistribution": "If >1 batch exists shows BatchSelector modal, else calls generateDistributionsFromBatches directly",
+          "handleDuplicateResolve": "Resolves box conflicts: 'remove' strips box from existing batch, 'proceed' ignores conflict",
+          "handleDeleteBatch / handleStartEdit / handleSaveEdit": "Batch CRUD — all blocked if distributions already exist (must reset first)",
+          "handleReset": "Clears all state via window.confirm",
+          "handleDownload": "Generates TXT blob or jsPDF document based on downloadFormat state"
+        }
+      },
+      {
+        "id": "InputSection.jsx",
+        "role": "Batch Input Form",
+        "description": "Purely presentational form. Two fields: Amount (number, prefix ₹) and Box Numbers (text, comma-separated). Parses box input to integer array, validates non-empty and positive amount locally, then calls onAssignAmount(amount, boxNumbers) prop. Supports Enter key submission. Clears fields after assign.",
+        "props_in": "onAssignAmount: (amount: Number, boxNumbers: Number[]) => void",
+        "props_out": "none"
+      },
+      {
+        "id": "ResultsPanel.jsx",
+        "role": "Distribution Viewer",
+        "description": "Pure display component. Receives distributions array and renders each folder as a card showing: folder index, total ₹ badge, and all box→amount allocations sorted by box number. Uses CSS animation-delay per card for staggered entrance.",
+        "props_in": "distributions: DistributionFolder[]",
+        "props_out": "none"
+      },
+      {
+        "id": "GridModal.jsx",
+        "role": "Box Grid Modal Wrapper",
+        "description": "Modal shell that wraps BoxGrid. Manages body scroll-lock (modal-open class on document.body) and a 250ms closing animation. Shows assigned box count in header. Accepts boxes array (100 items) and renders BoxGrid inside.",
+        "props_in": "boxes: (Number|null)[], isOpen: Boolean, onClose: () => void",
+        "props_out": "none"
+      },
+      {
+        "id": "BoxGrid.jsx",
+        "role": "10×10 Interactive Grid",
+        "description": "Renders all 100 boxes as a CSS grid. Each cell styled 'assigned' (highlighted, shows ₹ amount and dot) or 'empty'. Shows a legend at the bottom. Pure display — no event handlers.",
+        "props_in": "boxes: (Number|null)[]  — index = boxNum-1, value = ₹ amount or null",
+        "props_out": "none"
+      },
+      {
+        "id": "LoadingPopup.jsx",
+        "role": "Animated Assignment Progress Overlay",
+        "description": "Full-screen overlay shown during batch assignment. Runs a 5-step progress animation (Validating → Generating → Assigning → Updating → Complete) over exactly 5000ms using setInterval at 50ms ticks. On completion calls onComplete() after 400ms delay. Blocks UI during animation.",
+        "props_in": "isVisible: Boolean, onComplete: () => void",
+        "steps": ["Validating 🔍", "Generating 🎲", "Assigning 💰", "Updating 📝", "Complete ✅"]
+      },
+      {
+        "id": "ErrorNotification.jsx",
+        "role": "Toast Notification",
+        "description": "Displays ephemeral error/warning/success messages. Auto-dismisses (managed inside component via useEffect/timer). Receives notification state from parent.",
+        "props_in": "notification: { message: string, type: string } | null"
+      },
+      {
+        "id": "ConfirmDialog.jsx",
+        "role": "Reusable Confirm Modal",
+        "description": "Generic modal with title, message, confirm and cancel buttons. Type prop ('warning'|'error'|'info'|'success') controls icon emoji and background color. Has 250ms closing animation. Fully controlled via props.",
+        "props_in": "isOpen, title, message, confirmText, cancelText, onConfirm, onCancel, type"
+      },
+      {
+        "id": "Footer.jsx",
+        "role": "Static Footer",
+        "description": "3-column static info footer: About blurb, Features list, Quick Tips list. Bottom bar shows 'Deepak Distribution Systems' credit and Version 3.0.",
+        "props_in": "none",
+        "props_out": "none"
+      }
+    ],
+    "edges": [
+      { "from": "main.jsx",                          "to": "App.jsx",                             "type": "mounts" },
+      { "from": "App.jsx",                           "to": "Header.jsx",                          "type": "renders" },
+      { "from": "App.jsx",                           "to": "AmountDistributionSimulator.jsx",      "type": "renders" },
+      { "from": "App.jsx",                           "to": "Footer.jsx",                          "type": "renders" },
+      { "from": "AmountDistributionSimulator.jsx",   "to": "InputSection.jsx",                    "type": "renders", "data_passed": "onAssignAmount callback" },
+      { "from": "AmountDistributionSimulator.jsx",   "to": "ResultsPanel.jsx",                    "type": "renders", "data_passed": "distributions[]" },
+      { "from": "AmountDistributionSimulator.jsx",   "to": "GridModal.jsx",                       "type": "renders", "data_passed": "boxes[], isOpen, onClose" },
+      { "from": "GridModal.jsx",                     "to": "BoxGrid.jsx",                         "type": "renders", "data_passed": "boxes[]" },
+      { "from": "AmountDistributionSimulator.jsx",   "to": "LoadingPopup.jsx",                    "type": "renders", "data_passed": "isVisible, onComplete callback" },
+      { "from": "AmountDistributionSimulator.jsx",   "to": "ErrorNotification.jsx",               "type": "renders", "data_passed": "notification state" },
+      { "from": "AmountDistributionSimulator.jsx",   "to": "ConfirmDialog.jsx",                   "type": "renders", "data_passed": "confirmDialog state" },
+      { "from": "InputSection.jsx",                  "to": "AmountDistributionSimulator.jsx",     "type": "callback", "trigger": "onAssignAmount fires on Assign click or Enter key" },
+      { "from": "LoadingPopup.jsx",                  "to": "AmountDistributionSimulator.jsx",     "type": "callback", "trigger": "onComplete fires after 5s animation" }
+    ]
+  },
+
+  "user_flow": {
+    "step_1_assign": {
+      "label": "Assign Amount to Boxes",
+      "user_action": "Enter ₹ amount + comma-separated box numbers → click 'Assign Amount'",
+      "system_response": "Validates input → checks for duplicate boxes → if valid, stores in pendingBatchData → triggers LoadingPopup (5-second animation) → on complete, commits new Batch to state"
+    },
+    "step_2_manage_batches": {
+      "label": "Review & Edit Batches",
+      "user_action": "View batch list with amounts and box assignments. Can edit (inline) or delete any batch.",
+      "system_response": "Edit/delete blocked if distributions already exist. Inline edit validates box uniqueness across all other batches."
+    },
+    "step_3_view_grid": {
+      "label": "Inspect Box Grid (optional)",
+      "user_action": "Click 'View Box Grid' button (shows assigned count badge)",
+      "system_response": "Opens GridModal with 10×10 BoxGrid. Assigned boxes highlighted with amount. Empty boxes shown dimly."
+    },
+    "step_4_generate": {
+      "label": "Generate Distribution Folders",
+      "user_action": "Enter number of folders → click 'Generate Distribution'",
+      "system_response": "If >1 batch: shows BatchSelector to choose which batches to include. Then runs algorithm → populates distributions array → ResultsPanel renders all folders."
+    },
+    "step_5_export": {
+      "label": "Download Report",
+      "user_action": "Choose TXT or PDF format → click 'Download Results'",
+      "system_response": "TXT: generates plain-text report as Blob download. PDF: uses jsPDF to render a structured multi-page report with color-coded section headers, box assignment table, folder breakdowns, and grand total banner."
+    },
+    "step_6_reset": {
+      "label": "Reset Everything",
+      "user_action": "Click 'Reset All' → confirm via window.confirm dialog",
+      "system_response": "Clears batches, distributions, numFolders, selectedBatches, showBatchSelector."
+    }
+  },
+
+  "key_constraints_and_rules": [
+    "A box number (1–100) can only be in ONE batch at a time. Duplicates trigger DuplicateModal.",
+    "Batches cannot be created, edited, or deleted once distributions have been generated — user must Reset first.",
+    "Each generated folder ALWAYS contains exactly N box entries where N = max(assignedBoxes, 5).",
+    "Each folder total ALWAYS equals amountPerFolder (guaranteed by assigning remainder to last box).",
+    "Box numbers in folders are randomly picked from the full 1–100 range (not just assigned boxes).",
+    "LoadingPopup always takes exactly 5 seconds regardless of actual computation time — it's a UX animation, not a real progress indicator.",
+    "Export (TXT/PDF) is only available when distributions exist (distributions.length > 0).",
+    "Header auto-hides on scroll-down past 80px and reappears on scroll-up."
+  ],
+
+  "file_index": {
+    "src/main.jsx":                                           "Entry point — mounts React app",
+    "src/App.jsx":                                            "Page layout shell",
+    "src/index.css":                                          "Global CSS reset and base variables",
+    "src/App.css":                                            "App-level layout styles",
+    "src/components/AmountDistributionSimulator.jsx":         "Core engine + state owner + render orchestrator",
+    "src/components/Header.jsx":                              "Sticky auto-hide nav bar + How-To info modal",
+    "src/components/Footer.jsx":                              "Static 3-column footer",
+    "src/components/InputSection.jsx":                        "Batch assignment input form",
+    "src/components/ResultsPanel.jsx":                        "Generated folder display list",
+    "src/components/GridModal.jsx":                           "Modal wrapper for 10×10 box grid",
+    "src/components/BoxGrid.jsx":                             "10×10 pure visual grid of 100 boxes",
+    "src/components/LoadingPopup.jsx":                        "5-second animated processing overlay",
+    "src/components/ErrorNotification.jsx":                   "Toast notification for errors/warnings",
+    "src/components/ConfirmDialog.jsx":                       "Generic reusable confirm/cancel modal",
+    "src/styles/*.css":                                       "One CSS file per component — no shared utility classes",
+    "vite.config.js":                                         "Vite config with @vitejs/plugin-react",
+    "package.json":                                           "Dependencies: react@19, react-dom@19, jspdf@4. DevDeps: vite@8, eslint",
+    "index.html":                                             "HTML shell — single div#root mount point",
+    "dist/":                                                  "Production build output (generated by npm run build)",
+    "public/":                                                "Static assets served as-is"
+  },
+
+  "last_updated": "2026-04-16T23:40:54+05:30"
+}

@@ -1,5 +1,25 @@
 import "../styles/InputSection.css";
 
+/**
+ * Auto-separate box number input into 2-digit comma-separated groups.
+ * Targets only continuous digit blocks of 3 or more, preserving existing
+ * 1-2 digit blocks and separators. This prevents shifting during deletions.
+ * Works for real-time typing and pasting.
+ */
+function autoSeparateBoxNumbers(value) {
+  if (!value) return "";
+
+  // Replace any continuous sequence of 3 or more digits with chunked pairs.
+  // This leaves 1-2 digit blocks (and their surrounding separators) untouched.
+  return value.replace(/\d{3,}/g, (match) => {
+    const chunks = [];
+    for (let i = 0; i < match.length; i += 2) {
+      chunks.push(match.substring(i, i + 2));
+    }
+    return chunks.join(",");
+  });
+}
+
 export default function InputSection({
   rawInput,
   onRawInputChange,
@@ -144,7 +164,17 @@ export default function InputSection({
             <textarea
               id="box-numbers"
               value={rawInput}
-              onChange={(e) => onRawInputChange(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                const separated = autoSeparateBoxNumbers(val);
+                onRawInputChange(separated);
+              }}
+              onPaste={(e) => {
+                e.preventDefault();
+                const pasted = e.clipboardData.getData("text");
+                const separated = autoSeparateBoxNumbers(pasted);
+                onRawInputChange(separated);
+              }}
               onKeyDown={handleKeyDown}
               className="input-textarea"
               placeholder="02-04-06-08  or  02 30 55 08 35"

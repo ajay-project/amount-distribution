@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import "../styles/AmountDistributionSimulator.css";
 import InputSection from "./InputSection";
 import ResultsPanel from "./ResultsPanel";
@@ -14,19 +14,27 @@ import { parseBoxInput } from "../utils/parseBoxInput";
  * Uses random-cuts method for natural randomness + sparsity for pattern hiding.
  * @param {number} total - Must be divisible by 5
  * @param {number} numParts - Number of folders
+ * @param {number|null} maxAmount - Optional max value per folder (multiple of 5)
  * @returns {number[]} Array of length numParts, each a multiple of 5, summing to total
  */
-function randomPartitionMul5(total, numParts) {
+function randomPartitionMul5(total, numParts, maxAmount = null) {
   if (numParts === 1) return [total];
   if (total === 0) return Array(numParts).fill(0);
 
   const units = total / 5; // Work in units of 5
+  const maxUnits = maxAmount ? maxAmount / 5 : null;
 
   if (units < numParts) {
     // Not enough units for every folder — randomly assign
     let values = Array(numParts).fill(0);
     for (let u = 0; u < units; u++) {
-      const idx = Math.floor(Math.random() * numParts);
+      // Find folders that haven't hit max yet
+      let candidates = [];
+      for (let i = 0; i < numParts; i++) {
+        if (!maxUnits || values[i] < maxUnits) candidates.push(i);
+      }
+      if (candidates.length === 0) candidates = Array.from({length: numParts}, (_, i) => i);
+      const idx = candidates[Math.floor(Math.random() * candidates.length)];
       values[idx]++;
     }
     return values.map((v) => v * 5);
@@ -48,9 +56,47 @@ function randomPartitionMul5(total, numParts) {
   let allocated = rawValues.reduce((a, b) => a + b, 0);
   let remainder = units - allocated;
   while (remainder > 0) {
-    const idx = Math.floor(Math.random() * numParts);
+    // Find folders that haven't hit max yet
+    let candidates = [];
+    for (let i = 0; i < numParts; i++) {
+      if (!maxUnits || rawValues[i] < maxUnits) candidates.push(i);
+    }
+    if (candidates.length === 0) candidates = Array.from({length: numParts}, (_, i) => i);
+    const idx = candidates[Math.floor(Math.random() * candidates.length)];
     rawValues[idx]++;
     remainder--;
+  }
+
+  // Enforce max amount cap — redistribute excess
+  if (maxUnits) {
+    let overflow = true;
+    let iterations = 0;
+    while (overflow && iterations < 100) {
+      overflow = false;
+      for (let i = 0; i < numParts; i++) {
+        if (rawValues[i] > maxUnits) {
+          const excess = rawValues[i] - maxUnits;
+          rawValues[i] = maxUnits;
+          // Redistribute excess to random folders that are under the cap
+          for (let u = 0; u < excess; u++) {
+            let candidates = [];
+            for (let j = 0; j < numParts; j++) {
+              if (j !== i && rawValues[j] < maxUnits) candidates.push(j);
+            }
+            if (candidates.length === 0) {
+              // All at max — just put it somewhere (can't satisfy max constraint)
+              const target = Math.floor(Math.random() * numParts);
+              rawValues[target]++;
+              overflow = true;
+            } else {
+              const target = candidates[Math.floor(Math.random() * candidates.length)];
+              rawValues[target]++;
+            }
+          }
+        }
+      }
+      iterations++;
+    }
   }
 
   // Random sparsity — occasionally zero-out a folder and rebalance
@@ -67,6 +113,36 @@ function randomPartitionMul5(total, numParts) {
         } while (target === i);
         rawValues[target]++;
       }
+    }
+  }
+
+  // Re-enforce max after sparsity redistribution
+  if (maxUnits) {
+    let overflow = true;
+    let iterations = 0;
+    while (overflow && iterations < 50) {
+      overflow = false;
+      for (let i = 0; i < numParts; i++) {
+        if (rawValues[i] > maxUnits) {
+          const excess = rawValues[i] - maxUnits;
+          rawValues[i] = maxUnits;
+          for (let u = 0; u < excess; u++) {
+            let candidates = [];
+            for (let j = 0; j < numParts; j++) {
+              if (j !== i && rawValues[j] < maxUnits) candidates.push(j);
+            }
+            if (candidates.length === 0) {
+              const target = Math.floor(Math.random() * numParts);
+              rawValues[target]++;
+              overflow = true;
+            } else {
+              const target = candidates[Math.floor(Math.random() * candidates.length)];
+              rawValues[target]++;
+            }
+          }
+        }
+      }
+      iterations++;
     }
   }
 
@@ -121,32 +197,120 @@ function createMixGroupsByAmount(numbersWithAmounts) {
   return allGroups;
 }
 
+// ===== LOCAL STORAGE PERSISTENCE =====
+
+const STORAGE_KEY = "amt-dist-simulator-state";
+
+function loadPersistedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    // Convert copiedFolders array back to Set
+    if (parsed.copiedFolders) {
+      parsed.copiedFolders = new Set(parsed.copiedFolders);
+    } else {
+      parsed.copiedFolders = new Set();
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function saveState(state) {
+  try {
+    // Convert Set to Array for JSON serialization
+    const toSave = {
+      ...state,
+      copiedFolders: Array.from(state.copiedFolders || []),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch {
+    // Silently fail if storage is full
+  }
+}
+
+function clearPersistedState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Silently fail
+  }
+}
+
 // ===== MAIN COMPONENT =====
 
 export default function AmountDistributionSimulator() {
+  // Load persisted state once on mount
+  const persisted = useRef(loadPersistedState()).current;
+
   // === Core State ===
   // Map of number → amount: { "02": 2000, "08": 2000, "78": 1000 }
-  const [numbersWithAmounts, setNumbersWithAmounts] = useState({});
-  const [isLocked, setIsLocked] = useState(false);
+  const [numbersWithAmounts, setNumbersWithAmounts] = useState(persisted?.numbersWithAmounts || {});
+  const [isLocked, setIsLocked] = useState(persisted?.isLocked || false);
 
   // Pending input (for current entry round)
-  const [rawInput, setRawInput] = useState("");
-  const [pendingAmount, setPendingAmount] = useState("");
-  const [isProcessed, setIsProcessed] = useState(false);
-  const [pendingNumbers, setPendingNumbers] = useState([]);
+  const [rawInput, setRawInput] = useState(persisted?.rawInput || "");
+  const [pendingAmount, setPendingAmount] = useState(persisted?.pendingAmount || "");
+  const [isProcessed, setIsProcessed] = useState(persisted?.isProcessed || false);
+  const [pendingNumbers, setPendingNumbers] = useState(persisted?.pendingNumbers || []);
 
   // Distribution state
-  const [distributions, setDistributions] = useState([]);
-  const [numFolders, setNumFolders] = useState("");
-  const [mixEnabled, setMixEnabled] = useState(false);
+  const [distributions, setDistributions] = useState(persisted?.distributions || []);
+  const [numFolders, setNumFolders] = useState(persisted?.numFolders ?? "");
+  const [mixEnabled, setMixEnabled] = useState(persisted?.mixEnabled || false);
+  const [maxAmountEnabled, setMaxAmountEnabled] = useState(persisted?.maxAmountEnabled || false);
+  const [maxAmountValue, setMaxAmountValue] = useState(persisted?.maxAmountValue ?? "");
+
+  // Persistent copy highlight state — cleared only on reset
+  const [copiedFolders, setCopiedFolders] = useState(persisted?.copiedFolders || new Set());
+
+  // Folder connector states (lifted from ResultsPanel for persistence)
+  const [folderConns, setFolderConns] = useState(persisted?.folderConns || {});
 
   // "Add More" mode — true when user is adding additional numbers
-  const [isAddingMore, setIsAddingMore] = useState(false);
+  const [isAddingMore, setIsAddingMore] = useState(persisted?.isAddingMore || false);
 
-  // UI state
+  // UI state (transient — not persisted)
   const [showGridModal, setShowGridModal] = useState(false);
   const [notification, setNotification] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState(null);
+
+  // === Auto-save to localStorage on every state change ===
+  useEffect(() => {
+    saveState({
+      numbersWithAmounts,
+      isLocked,
+      rawInput,
+      pendingAmount,
+      isProcessed,
+      pendingNumbers,
+      distributions,
+      numFolders,
+      mixEnabled,
+      maxAmountEnabled,
+      maxAmountValue,
+      copiedFolders,
+      folderConns,
+      isAddingMore,
+    });
+  }, [
+    numbersWithAmounts,
+    isLocked,
+    rawInput,
+    pendingAmount,
+    isProcessed,
+    pendingNumbers,
+    distributions,
+    numFolders,
+    mixEnabled,
+    maxAmountEnabled,
+    maxAmountValue,
+    copiedFolders,
+    folderConns,
+    isAddingMore,
+  ]);
 
   // === Derived ===
   const allNumbers = Object.keys(numbersWithAmounts);
@@ -344,6 +508,11 @@ export default function AmountDistributionSimulator() {
     setDistributions([]);
     setNumFolders("");
     setMixEnabled(false);
+    setMaxAmountEnabled(false);
+    setMaxAmountValue("");
+    setCopiedFolders(new Set());
+    setFolderConns({});
+    clearPersistedState();
   };
 
   // ===== DISTRIBUTION ALGORITHM =====
@@ -361,6 +530,16 @@ export default function AmountDistributionSimulator() {
       return;
     }
 
+    // Max Amount fallback: if enabled but no value, auto-disable and proceed normally
+    let effectiveMaxAmount = null;
+    if (maxAmountEnabled) {
+      if (!maxAmountValue || maxAmountValue <= 0) {
+        setMaxAmountEnabled(false);
+      } else {
+        effectiveMaxAmount = maxAmountValue;
+      }
+    }
+
     const folders = Array.from({ length: numFolders }, () => ({}));
 
     if (mixEnabled) {
@@ -368,7 +547,7 @@ export default function AmountDistributionSimulator() {
       const groups = createMixGroupsByAmount(numbersWithAmounts);
       for (const { nums, amount } of groups) {
         // All numbers in group share the same partition
-        const partition = randomPartitionMul5(amount, numFolders);
+        const partition = randomPartitionMul5(amount, numFolders, effectiveMaxAmount);
         for (const num of nums) {
           for (let f = 0; f < numFolders; f++) {
             if (partition[f] > 0) {
@@ -387,7 +566,7 @@ export default function AmountDistributionSimulator() {
       }
 
       for (const [num, numAmount] of shuffledEntries) {
-        const partition = randomPartitionMul5(numAmount, numFolders);
+        const partition = randomPartitionMul5(numAmount, numFolders, effectiveMaxAmount);
         for (let f = 0; f < numFolders; f++) {
           if (partition[f] > 0) {
             folders[f][num] = partition[f];
@@ -396,6 +575,7 @@ export default function AmountDistributionSimulator() {
       }
     }
 
+    setCopiedFolders(new Set());
     setDistributions(folders);
   };
 
@@ -607,20 +787,61 @@ export default function AmountDistributionSimulator() {
                   </div>
                 </div>
 
-                {/* Mix Toggle */}
-                <label className={`mix-toggle ${foldersGenerated ? "disabled" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={mixEnabled}
-                    onChange={(e) => setMixEnabled(e.target.checked)}
-                    disabled={foldersGenerated}
-                  />
-                  <span className="mix-toggle-slider"></span>
-                  <span className="mix-toggle-label">
-                    🔀 Mix Mode {uniqueAmounts.length > 1 && "(same-amount groups)"}
-                    {foldersGenerated && <span className="mix-locked-hint">(locked)</span>}
-                  </span>
-                </label>
+                {/* Toggle Controls Row — Mix Mode + Max Amount side by side */}
+                <div className="toggle-controls-row">
+                  {/* Mix Toggle */}
+                  <label className={`mix-toggle ${foldersGenerated ? "disabled" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={mixEnabled}
+                      onChange={(e) => setMixEnabled(e.target.checked)}
+                      disabled={foldersGenerated}
+                    />
+                    <span className="mix-toggle-slider"></span>
+                    <span className="mix-toggle-label">
+                      🔀 Mix Mode {uniqueAmounts.length > 1 && "(same-amount groups)"}
+                      {foldersGenerated && <span className="mix-locked-hint">(locked)</span>}
+                    </span>
+                  </label>
+
+                  {/* Max Amount Toggle */}
+                  <label className={`mix-toggle ${foldersGenerated ? "disabled" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={maxAmountEnabled}
+                      onChange={(e) => setMaxAmountEnabled(e.target.checked)}
+                      disabled={foldersGenerated}
+                    />
+                    <span className="mix-toggle-slider"></span>
+                    <span className="mix-toggle-label">
+                      🔒 Max Amount
+                      {foldersGenerated && <span className="mix-locked-hint">(locked)</span>}
+                    </span>
+                  </label>
+
+                  {maxAmountEnabled && !foldersGenerated && (
+                    <div className="max-amount-input-wrap">
+                      <span className="input-prefix">₹</span>
+                      <input
+                        type="number"
+                        min="5"
+                        step="5"
+                        value={maxAmountValue}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "") setMaxAmountValue("");
+                          else {
+                            const num = parseInt(val, 10);
+                            if (!isNaN(num) && num > 0) setMaxAmountValue(num);
+                          }
+                        }}
+                        className="input-field max-amount-input"
+                        placeholder="e.g. 90"
+                        id="max-amount-input"
+                      />
+                    </div>
+                  )}
+                </div>
 
                 <div className="folder-actions">
                   <button
@@ -705,6 +926,10 @@ export default function AmountDistributionSimulator() {
           mixEnabled={mixEnabled}
           onReRandomize={handleReRandomize}
           numbersWithAmounts={numbersWithAmounts}
+          copiedFolders={copiedFolders}
+          onCopyFolder={(idx) => setCopiedFolders((prev) => new Set(prev).add(idx))}
+          folderConns={folderConns}
+          onFolderConnsChange={setFolderConns}
         />
       )}
     </div>

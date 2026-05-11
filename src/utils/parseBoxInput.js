@@ -36,6 +36,12 @@ export function parseBoxInput(raw) {
     // Normalize for dedup: strip leading zeros (no parseInt)
     const key = trimmed.replace(/^0+/, "") || "0";
 
+    // Skip incomplete standalone entries (single digits)
+    if (trimmed.length < 2) continue;
+
+    // Skip "00" (invalid box number, range starts from 01)
+    if (trimmed === "00") continue;
+
     if (!seenNormalized.has(key)) {
       seenNormalized.add(key);
       result.push(trimmed); // Keep original format with leading zeros

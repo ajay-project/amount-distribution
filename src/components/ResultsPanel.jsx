@@ -1,4 +1,3 @@
-import { useState } from "react";
 import "../styles/ResultsPanel.css";
 
 // Connectors replace () around amount: 01&30, 02#205, etc.
@@ -10,20 +9,15 @@ function getConnectorLabel(connector) {
   return connector;
 }
 
-export default function ResultsPanel({ distributions, mixEnabled, onReRandomize, numbersWithAmounts }) {
-  const [copiedIndex, setCopiedIndex] = useState(null);
-  const [folderConns, setFolderConns] = useState({}); // { folderIndex: connectorIndex }
-
+export default function ResultsPanel({ distributions, mixEnabled, onReRandomize, numbersWithAmounts, copiedFolders, onCopyFolder, folderConns, onFolderConnsChange }) {
   const getConnector = (folderIndex) => {
     const idx = folderConns[folderIndex] || 0;
     return CONNECTORS[idx];
   };
 
   const cycleConnector = (folderIndex) => {
-    setFolderConns((prev) => {
-      const current = prev[folderIndex] || 0;
-      return { ...prev, [folderIndex]: (current + 1) % CONNECTORS.length };
-    });
+    const current = folderConns[folderIndex] || 0;
+    onFolderConnsChange({ ...folderConns, [folderIndex]: (current + 1) % CONNECTORS.length });
   };
 
   // Format a single num+amount pair with the current connector
@@ -53,7 +47,7 @@ export default function ResultsPanel({ distributions, mixEnabled, onReRandomize,
       .join(", ");
   };
 
-  const getFolderText = (dist, folderIndex) => {
+  const getFolderCopyText = (dist, folderIndex) => {
     const entries = Object.entries(dist).sort((a, b) =>
       a[0].localeCompare(b[0], undefined, { numeric: true })
     );
@@ -66,14 +60,14 @@ export default function ResultsPanel({ distributions, mixEnabled, onReRandomize,
     } else {
       text = entries.map(([num, amt]) => formatEntry(num, amt, connector)).join(", ");
     }
-    return `Folder ${folderIndex + 1}: ${text} ==== ${total}`;
+    // Copy only the data without folder name/number
+    return `${text} ==== ${total}`;
   };
 
   const handleCopy = (folderIndex) => {
-    const text = getFolderText(distributions[folderIndex], folderIndex);
+    const text = getFolderCopyText(distributions[folderIndex], folderIndex);
     navigator.clipboard.writeText(text).then(() => {
-      setCopiedIndex(folderIndex);
-      setTimeout(() => setCopiedIndex(null), 1500);
+      onCopyFolder(folderIndex);
     });
   };
 
@@ -116,7 +110,7 @@ export default function ResultsPanel({ distributions, mixEnabled, onReRandomize,
           return (
             <div
               key={folderIndex}
-              className="folder-card"
+              className={`folder-card ${copiedFolders.has(folderIndex) ? "folder-copied" : ""}`}
               style={{ animationDelay: `${folderIndex * 0.03}s` }}
             >
               <div className="folder-card-header">
@@ -140,20 +134,14 @@ export default function ResultsPanel({ distributions, mixEnabled, onReRandomize,
 
                   {/* Copy Button */}
                   <button
-                    className={`btn-copy ${copiedIndex === folderIndex ? "copied" : ""}`}
+                    className={`btn-copy ${copiedFolders.has(folderIndex) ? "copied" : ""}`}
                     onClick={() => handleCopy(folderIndex)}
                     title="Copy folder"
                   >
-                    {copiedIndex === folderIndex ? (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 6L9 17l-5-5" />
-                      </svg>
-                    ) : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                      </svg>
-                    )}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                    </svg>
                   </button>
                 </div>
               </div>

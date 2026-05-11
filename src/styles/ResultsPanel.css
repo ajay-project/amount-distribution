@@ -69,14 +69,14 @@
 
 /* Entire folder highlighted green when copied */
 .folder-card.folder-copied {
-  background: rgba(16, 185, 129, 0.06);
-  border-color: rgba(16, 185, 129, 0.35);
-  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1), var(--shadow-xs);
+  background: rgba(16, 185, 129, 0.32);
+  border-color: rgba(16, 185, 129, 0.75);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25), var(--shadow-xs);
 }
 
 .folder-card.folder-copied .folder-card-header {
-  background: rgba(16, 185, 129, 0.08);
-  border-bottom-color: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.25);
+  border-bottom-color: rgba(16, 185, 129, 0.45);
 }
 
 @keyframes folderSlideIn {
@@ -181,9 +181,20 @@
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--primary-dark);
+  font-weight: 700;
+  color: var(--text-primary);
   white-space: nowrap;
+}
+
+/* Ensure numbers pop on the green highlight */
+.folder-card.folder-copied .allocation-chip {
+  background: white;
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #064e3b; /* Deep forest green for high contrast on light green */
+}
+
+.folder-card.folder-copied .chip-amt {
+  color: #059669;
 }
 
 .chip-amt { font-weight: 400; color: var(--text-secondary); margin-left: 1px; }
@@ -209,6 +220,11 @@
   word-break: break-all;
 }
 
+.folder-card.folder-copied .folder-mix-text {
+  color: #064e3b;
+  font-weight: 500;
+}
+
 /* Folder Total Line */
 .folder-total-line {
   margin-top: 0.35rem;
@@ -219,6 +235,11 @@
   font-weight: 700;
   color: var(--primary);
   text-align: right;
+}
+
+.folder-card.folder-copied .folder-total-line {
+  color: #064e3b;
+  border-top-color: rgba(6, 78, 59, 0.2);
 }
 
 /* Warning Outline Button */

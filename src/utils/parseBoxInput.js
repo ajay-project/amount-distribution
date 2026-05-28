@@ -11,18 +11,11 @@
  *
  * Returns: sorted unique string array, e.g. ["02","04","06","08"]
  */
-export function parseBoxInput(raw) {
+export function parseBoxInput(raw, shuffleEnabled = false) {
   if (!raw || !raw.trim()) return [];
 
-  // Normalize all separators to commas
-  const normalized = raw
-    .replace(/[\n\r\t]+/g, ",")
-    .replace(/\s+/g, ",")
-    .replace(/-/g, ",")
-    .replace(/,+/g, ",")
-    .replace(/^,|,$/g, "");
-
-  const tokens = normalized.split(",");
+  // Split by comma, whitespace, or hyphen
+  const tokens = raw.split(/[,\s\-]+/);
   const seenNormalized = new Set();
   const result = [];
 
@@ -33,23 +26,41 @@ export function parseBoxInput(raw) {
     // Must be digits only
     if (!/^\d+$/.test(trimmed)) continue;
 
-    // Normalize for dedup: strip leading zeros (no parseInt)
-    const key = trimmed.replace(/^0+/, "") || "0";
+    let parsedVal = "";
+    // Special check for 1 followed only by zeros (e.g. 10, 100, 1000)
+    if (/^0*10+$/.test(trimmed)) {
+      const zeroCount = (trimmed.match(/0/g) || []).length - (trimmed.match(/^0+/) || [""])[0].length;
+      if (zeroCount >= 2) {
+        parsedVal = "100";
+      } else {
+        parsedVal = "10";
+      }
+    } else {
+      const num = parseInt(trimmed, 10);
+      if (isNaN(num) || num < 1 || num > 100) {
+        // Outside 1-100 range -> ignore
+        continue;
+      }
+      // Pad single digits (1-9) to 2-digits
+      if (num < 10) {
+        parsedVal = `0${num}`;
+      } else {
+        parsedVal = String(num);
+      }
+    }
 
-    // Skip incomplete standalone entries (single digits)
-    if (trimmed.length < 2) continue;
-
-    // Skip "00" (invalid box number, range starts from 01)
-    if (trimmed === "00") continue;
-
+    // Deduplicate
+    const key = parsedVal.replace(/^0+/, "") || "0";
     if (!seenNormalized.has(key)) {
       seenNormalized.add(key);
-      result.push(trimmed); // Keep original format with leading zeros
+      result.push(parsedVal);
     }
   }
 
-  // Sort by numeric value, preserve string format (no parseInt)
-  result.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  // Sort by numeric value only if shuffleEnabled is false
+  if (!shuffleEnabled) {
+    result.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }
 
   return result;
 }

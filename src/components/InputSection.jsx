@@ -5,18 +5,33 @@ import "../styles/InputSection.css";
  * Targets only continuous digit blocks of 3 or more, preserving existing
  * 1-2 digit blocks and separators. This prevents shifting during deletions.
  * Works for real-time typing and pasting.
+ *
+ * Enforces 1-100 logic: caps multiple zeros (e.g. 1000, 10000) to 100.
  */
 function autoSeparateBoxNumbers(value) {
   if (!value) return "";
 
-  // Replace any continuous sequence of 3 or more digits with chunked pairs.
-  // This leaves 1-2 digit blocks (and their surrounding separators) untouched.
-  return value.replace(/\d{3,}/g, (match) => {
-    const chunks = [];
-    for (let i = 0; i < match.length; i += 2) {
-      chunks.push(match.substring(i, i + 2));
+  // Replace continuous digits
+  return value.replace(/\d+/g, (match) => {
+    // Check if it's 1 + zeros (e.g. 10, 100, 1000)
+    if (/^0*10+$/.test(match)) {
+      const zeroCount = (match.match(/0/g) || []).length - (match.match(/^0+/) || [""])[0].length;
+      if (zeroCount >= 2) {
+        return "100";
+      }
+      return match; // Keep 10 or 010 as is
     }
-    return chunks.join(",");
+
+    // Otherwise, if it is 3 or more digits, separate into 2-digit groups
+    if (match.length >= 3) {
+      const chunks = [];
+      for (let i = 0; i < match.length; i += 2) {
+        chunks.push(match.substring(i, i + 2));
+      }
+      return chunks.join(",");
+    }
+
+    return match;
   });
 }
 
@@ -39,6 +54,8 @@ export default function InputSection({
   isProcessed,
   isAddingMore,
   foldersGenerated,
+  shuffleEnabled,
+  onShuffleToggle,
 }) {
   const hasAssigned = Object.keys(numbersWithAmounts).length > 0;
   const batchCount = Object.keys(groupedByAmount).length;
@@ -124,17 +141,35 @@ export default function InputSection({
   // ===== INPUT STATE — entering numbers and amount =====
   return (
     <div className="input-section" id="input-section">
-      <div className="section-header">
-        <div className="section-icon-wrap">
-          <span className="section-icon-emoji" aria-hidden="true">💵</span>
+      <div className="section-header input-section-header">
+        <div className="input-header-left">
+          <div className="section-icon-wrap">
+            <span className="section-icon-emoji" aria-hidden="true">💵</span>
+          </div>
+          <div>
+            <h3>{isAddingMore ? "Add More Numbers" : "Amount Assignment"}</h3>
+            <p className="section-desc">
+              {isAddingMore
+                ? "Add new numbers with a different amount"
+                : "Enter numbers and assign amount"}
+            </p>
+          </div>
         </div>
-        <div>
-          <h3>{isAddingMore ? "Add More Numbers" : "Amount Assignment"}</h3>
-          <p className="section-desc">
-            {isAddingMore
-              ? "Add new numbers with a different amount"
-              : "Enter numbers and assign amount"}
-          </p>
+
+        {/* Shuffle Toggle in the top right corner */}
+        <div className="input-header-right">
+          <label className={`mix-toggle ${isProcessed ? "disabled" : ""} input-mix-toggle-label`}>
+            <input
+              type="checkbox"
+              checked={shuffleEnabled}
+              onChange={(e) => onShuffleToggle(e.target.checked)}
+              disabled={isProcessed}
+            />
+            <span className="mix-toggle-slider"></span>
+            <span className="mix-toggle-label">
+              🔀 Shuffle: {shuffleEnabled ? "ON" : "OFF"}
+            </span>
+          </label>
         </div>
       </div>
 
@@ -158,7 +193,7 @@ export default function InputSection({
         <div className="input-group">
           <label htmlFor="box-numbers">
             <span className="label-text">Box Numbers</span>
-            <span className="label-hint">Hyphen, space, or comma separated</span>
+            <span className="label-hint">Hyphen, space, or comma separated (1-100)</span>
           </label>
           <div className="input-with-clear">
             <textarea
@@ -178,7 +213,7 @@ export default function InputSection({
               onKeyDown={handleKeyDown}
               className="input-textarea"
               placeholder="02-04-06-08  or  02 30 55 08 35"
-              rows={2}
+              rows={1}
               disabled={isProcessed}
             />
             {rawInput && !isProcessed && (

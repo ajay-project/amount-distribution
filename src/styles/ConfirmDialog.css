@@ -115,6 +115,23 @@
   color: var(--text-primary);
 }
 
+.confirm-icon-wrap.warning {
+  background: rgba(245,158,11,0.1);
+  border-color: rgba(245,158,11,0.2);
+}
+.confirm-icon-wrap.error {
+  background: rgba(239,68,68,0.1);
+  border-color: rgba(239,68,68,0.2);
+}
+.confirm-icon-wrap.info {
+  background: rgba(59,130,246,0.1);
+  border-color: rgba(59,130,246,0.2);
+}
+.confirm-icon-wrap.success {
+  background: rgba(16,185,129,0.1);
+  border-color: rgba(16,185,129,0.2);
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
   .confirm-dialog {

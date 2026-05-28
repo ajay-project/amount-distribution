@@ -6,6 +6,7 @@ import GridModal from "./GridModal";
 import ErrorNotification from "./ErrorNotification";
 import ConfirmDialog from "./ConfirmDialog";
 import { parseBoxInput } from "../utils/parseBoxInput";
+import { useAuth } from "../hooks/useAuth";
 
 // ===== DISTRIBUTION HELPERS =====
 
@@ -199,11 +200,14 @@ function createMixGroupsByAmount(numbersWithAmounts) {
 
 // ===== LOCAL STORAGE PERSISTENCE =====
 
-const STORAGE_KEY = "amt-dist-simulator-state";
+const getStorageKey = (userId) => {
+  return userId ? `amt-dist-simulator-state-${userId}` : "amt-dist-simulator-state";
+};
 
-function loadPersistedState() {
+function loadPersistedState(userId) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const key = getStorageKey(userId);
+    const raw = localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     // Convert copiedFolders array back to Set
@@ -218,22 +222,24 @@ function loadPersistedState() {
   }
 }
 
-function saveState(state) {
+function saveState(state, userId) {
   try {
+    const key = getStorageKey(userId);
     // Convert Set to Array for JSON serialization
     const toSave = {
       ...state,
       copiedFolders: Array.from(state.copiedFolders || []),
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    localStorage.setItem(key, JSON.stringify(toSave));
   } catch {
     // Silently fail if storage is full
   }
 }
 
-function clearPersistedState() {
+function clearPersistedState(userId) {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    const key = getStorageKey(userId);
+    localStorage.removeItem(key);
   } catch {
     // Silently fail
   }
@@ -242,13 +248,29 @@ function clearPersistedState() {
 // ===== MAIN COMPONENT =====
 
 export default function AmountDistributionSimulator() {
+  const { user } = useAuth();
+  const userId = user?.id;
+
   // Load persisted state once on mount
-  const persisted = useRef(loadPersistedState()).current;
+  const persisted = useRef(loadPersistedState(userId)).current;
 
   // === Core State ===
-  // Map of number → amount: { "02": 2000, "08": 2000, "78": 1000 }
-  const [numbersWithAmounts, setNumbersWithAmounts] = useState(persisted?.numbersWithAmounts || {});
+  // Map of amount → list of numbers: { "1000": ["01", "02"], "500": ["01"] }
+  const [groupedByAmount, setGroupedByAmount] = useState(() => {
+    if (persisted?.groupedByAmount) return persisted.groupedByAmount;
+    if (persisted?.numbersWithAmounts) {
+      const g = {};
+      for (const [num, amt] of Object.entries(persisted.numbersWithAmounts)) {
+        const amtStr = String(amt);
+        if (!g[amtStr]) g[amtStr] = [];
+        g[amtStr].push(num);
+      }
+      return g;
+    }
+    return {};
+  });
   const [isLocked, setIsLocked] = useState(persisted?.isLocked || false);
+  const [shuffleEnabled, setShuffleEnabled] = useState(persisted?.shuffleEnabled || false);
 
   // Pending input (for current entry round)
   const [rawInput, setRawInput] = useState(persisted?.rawInput || "");
@@ -280,7 +302,7 @@ export default function AmountDistributionSimulator() {
   // === Auto-save to localStorage on every state change ===
   useEffect(() => {
     saveState({
-      numbersWithAmounts,
+      groupedByAmount,
       isLocked,
       rawInput,
       pendingAmount,
@@ -294,9 +316,10 @@ export default function AmountDistributionSimulator() {
       copiedFolders,
       folderConns,
       isAddingMore,
-    });
+      shuffleEnabled,
+    }, userId);
   }, [
-    numbersWithAmounts,
+    groupedByAmount,
     isLocked,
     rawInput,
     pendingAmount,
@@ -310,13 +333,26 @@ export default function AmountDistributionSimulator() {
     copiedFolders,
     folderConns,
     isAddingMore,
+    shuffleEnabled,
+    userId,
   ]);
 
   // === Derived ===
+  // Derive numbersWithAmounts from groupedByAmount by summing up values for duplicate numbers
+  const numbersWithAmounts = {};
+  for (const [amtStr, nums] of Object.entries(groupedByAmount)) {
+    const amt = Number(amtStr);
+    for (const num of nums) {
+      numbersWithAmounts[num] = (numbersWithAmounts[num] || 0) + amt;
+    }
+  }
+
   const allNumbers = Object.keys(numbersWithAmounts);
-  const totalNumbers = allNumbers.length;
+  const totalNumbers = Object.values(groupedByAmount).reduce((sum, nums) => sum + nums.length, 0);
   const totalValue = Object.values(numbersWithAmounts).reduce((s, v) => s + v, 0);
-  const uniqueAmounts = [...new Set(Object.values(numbersWithAmounts))].sort((a, b) => b - a);
+  const uniqueAmounts = Object.keys(groupedByAmount)
+    .map(Number)
+    .sort((a, b) => b - a);
   const foldersGenerated = distributions.length > 0;
   const hasAssignedNumbers = totalNumbers > 0;
 
@@ -330,17 +366,6 @@ export default function AmountDistributionSimulator() {
     return found ? numbersWithAmounts[found] : null;
   });
   const assignedBoxes = boxes.filter((b) => b !== null).length;
-
-  // Group numbersWithAmounts by amount for display
-  const groupedByAmount = {};
-  for (const [num, amt] of Object.entries(numbersWithAmounts)) {
-    if (!groupedByAmount[amt]) groupedByAmount[amt] = [];
-    groupedByAmount[amt].push(num);
-  }
-  // Sort numbers within each group
-  for (const amt of Object.keys(groupedByAmount)) {
-    groupedByAmount[amt].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  }
 
   // ===== HANDLERS =====
 
@@ -357,19 +382,9 @@ export default function AmountDistributionSimulator() {
   };
 
   const handleProcessInput = () => {
-    const parsed = parseBoxInput(rawInput);
+    const parsed = parseBoxInput(rawInput, shuffleEnabled);
     if (parsed.length === 0) {
       setNotification({ message: "No valid numbers found in input", type: "error" });
-      return;
-    }
-
-    // Check for duplicates with already-assigned numbers
-    const dupes = parsed.filter((n) => numbersWithAmounts[n] !== undefined);
-    if (dupes.length > 0) {
-      setNotification({
-        message: `Numbers already assigned: ${dupes.join(", ")}. Remove them or use Edit.`,
-        type: "error",
-      });
       return;
     }
 
@@ -392,12 +407,17 @@ export default function AmountDistributionSimulator() {
       return;
     }
 
-    // Add to numbersWithAmounts
-    const updated = { ...numbersWithAmounts };
-    for (const num of pendingNumbers) {
-      updated[num] = pendingAmount;
+    // Add to groupedByAmount
+    const updated = { ...groupedByAmount };
+    const amtStr = String(pendingAmount);
+    if (!updated[amtStr]) {
+      updated[amtStr] = [];
     }
-    setNumbersWithAmounts(updated);
+    // Deduplicate within the same amount group
+    const merged = new Set([...updated[amtStr], ...pendingNumbers]);
+    updated[amtStr] = Array.from(merged);
+    setGroupedByAmount(updated);
+
     setIsLocked(true);
     setIsAddingMore(false);
 
@@ -413,7 +433,7 @@ export default function AmountDistributionSimulator() {
     }
 
     setNotification({
-      message: `✅ Assigned ₹${pendingAmount.toLocaleString()} to ${pendingNumbers.length} numbers (${Object.keys(updated).length} total)`,
+      message: `✅ Assigned ₹${pendingAmount.toLocaleString()} to ${pendingNumbers.length} numbers`,
       type: "success",
     });
   };
@@ -438,16 +458,13 @@ export default function AmountDistributionSimulator() {
 
   // Edit a specific batch (amount group) — remove those numbers and pre-fill for re-entry
   const handleEditBatch = (batchAmount) => {
-    const batchNums = Object.entries(numbersWithAmounts)
-      .filter(([, amt]) => amt === Number(batchAmount))
-      .map(([num]) => num);
+    const amtStr = String(batchAmount);
+    const batchNums = groupedByAmount[amtStr] || [];
 
-    // Remove this batch from numbersWithAmounts
-    const updated = { ...numbersWithAmounts };
-    for (const num of batchNums) {
-      delete updated[num];
-    }
-    setNumbersWithAmounts(updated);
+    // Remove this batch from groupedByAmount
+    const updated = { ...groupedByAmount };
+    delete updated[amtStr];
+    setGroupedByAmount(updated);
 
     // Pre-fill inputs with this batch's data
     setRawInput(batchNums.join(", "));
@@ -455,7 +472,7 @@ export default function AmountDistributionSimulator() {
     setIsProcessed(true);
     setPendingNumbers(batchNums);
 
-    // If no numbers left, unlock fully
+    // If no groups left, unlock fully
     if (Object.keys(updated).length === 0) {
       setIsLocked(false);
     } else {
@@ -471,13 +488,10 @@ export default function AmountDistributionSimulator() {
 
   // Remove a specific batch (all numbers with that amount)
   const handleRemoveBatch = (batchAmount) => {
-    const updated = { ...numbersWithAmounts };
-    for (const [num, amt] of Object.entries(numbersWithAmounts)) {
-      if (amt === Number(batchAmount)) {
-        delete updated[num];
-      }
-    }
-    setNumbersWithAmounts(updated);
+    const amtStr = String(batchAmount);
+    const updated = { ...groupedByAmount };
+    delete updated[amtStr];
+    setGroupedByAmount(updated);
 
     // If no numbers left, unlock fully
     if (Object.keys(updated).length === 0) {
@@ -498,7 +512,7 @@ export default function AmountDistributionSimulator() {
   };
 
   const handleDelete = () => {
-    setNumbersWithAmounts({});
+    setGroupedByAmount({});
     setRawInput("");
     setPendingAmount("");
     setPendingNumbers([]);
@@ -512,7 +526,7 @@ export default function AmountDistributionSimulator() {
     setMaxAmountValue("");
     setCopiedFolders(new Set());
     setFolderConns({});
-    clearPersistedState();
+    clearPersistedState(userId);
   };
 
   // ===== DISTRIBUTION ALGORITHM =====
@@ -701,6 +715,8 @@ export default function AmountDistributionSimulator() {
               isProcessed={isProcessed}
               isAddingMore={isAddingMore}
               foldersGenerated={foldersGenerated}
+              shuffleEnabled={shuffleEnabled}
+              onShuffleToggle={(checked) => setShuffleEnabled(checked)}
             />
           </div>
 

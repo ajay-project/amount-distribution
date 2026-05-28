@@ -59,12 +59,6 @@ body.modal-open .app-header {
   font-size: 1.6rem;
   position: relative;
   z-index: 1;
-  animation: logoBounce 3s ease-in-out infinite;
-}
-
-@keyframes logoBounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
 }
 
 .logo-pulse {
@@ -72,12 +66,7 @@ body.modal-open .app-header {
   inset: 0;
   border-radius: var(--radius-full);
   background: var(--primary-100);
-  animation: logoPulseRing 3s ease-in-out infinite;
-}
-
-@keyframes logoPulseRing {
-  0%, 100% { transform: scale(0.8); opacity: 0.6; }
-  50% { transform: scale(1.1); opacity: 0; }
+  opacity: 0.35;
 }
 
 .brand-text {

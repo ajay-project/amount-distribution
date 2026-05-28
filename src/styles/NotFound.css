@@ -1,0 +1,59 @@
+.notfound-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 80vh;
+  padding: 2rem;
+  background-color: var(--bg-page);
+  font-family: var(--font-sans);
+}
+
+.notfound-card {
+  background-color: var(--bg-card);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 3rem;
+  max-width: 500px;
+  width: 100%;
+  text-align: center;
+  border: 1px solid var(--border);
+}
+
+.notfound-emoji {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.notfound-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+}
+
+.notfound-description {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.notfound-btn {
+  display: inline-block;
+  background-color: var(--primary);
+  background-image: var(--primary-gradient);
+  color: #fff;
+  border: none;
+  padding: 0.85rem 2.5rem;
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.notfound-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-glow);
+}

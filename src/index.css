@@ -180,3 +180,10 @@ html, body {
     transform: none;
   }
 }
+
+/* ===== Scroll Lock ===== */
+body.modal-open, html.modal-open {
+  overflow: hidden !important;
+  height: 100% !important;
+  width: 100% !important;
+}

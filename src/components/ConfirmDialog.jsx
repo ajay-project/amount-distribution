@@ -46,19 +46,19 @@ export default function ConfirmDialog({
   };
 
   const iconConfig = {
-    warning: { emoji: "⚠️", bg: "rgba(245,158,11,0.1)", border: "rgba(245,158,11,0.2)" },
-    error: { emoji: "❌", bg: "rgba(239,68,68,0.1)", border: "rgba(239,68,68,0.2)" },
-    info: { emoji: "ℹ️", bg: "rgba(59,130,246,0.1)", border: "rgba(59,130,246,0.2)" },
-    success: { emoji: "✅", bg: "rgba(16,185,129,0.1)", border: "rgba(16,185,129,0.2)" },
+    warning: { emoji: "⚠️", className: "warning" },
+    error: { emoji: "❌", className: "error" },
+    info: { emoji: "ℹ️", className: "info" },
+    success: { emoji: "✅", className: "success" },
   };
 
-  const { emoji, bg, border } = iconConfig[type] || iconConfig.info;
+  const { emoji, className } = iconConfig[type] || iconConfig.info;
 
   return (
     <div className={`confirm-overlay ${isClosing ? "closing" : ""}`}>
       <div className={`confirm-dialog ${isClosing ? "closing" : ""}`}>
         <div className="confirm-header">
-          <div className="confirm-icon-wrap" style={{ background: bg, borderColor: border }}>
+          <div className={`confirm-icon-wrap ${className}`}>
             <span>{emoji}</span>
           </div>
           <h2>{title}</h2>

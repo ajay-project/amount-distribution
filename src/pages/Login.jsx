@@ -14,12 +14,12 @@ export default function Login() {
   }
 
   // Form states
-  const [email, setEmail]       = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   // UI state
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(() => {
+  const [error, setError] = useState(() => {
     const msg = localStorage.getItem("login_error_message");
     if (msg) {
       localStorage.removeItem("login_error_message");

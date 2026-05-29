@@ -199,7 +199,7 @@ export default function VerifyAccount() {
             <p className="verify-modal-text">
               Your account is pending admin approval.
               <br />
-              Please wait until <strong>Edwin</strong> approves your access.
+              Please wait until <strong>an administrator</strong> approves your access.
             </p>
             <div className="verify-modal-tip">
               💡 Your credentials are correct — you just need activation from

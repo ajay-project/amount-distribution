@@ -43,7 +43,6 @@ export default function Signup() {
       <div className="signup-container">
         <div className="signup-card">
           <div className="signup-logo-container">
-            <span className="signup-logo-emoji">🎉</span>
             <h2 className="signup-title">Account Created</h2>
             <p className="signup-subtitle">Registration completed successfully!</p>
           </div>
@@ -70,7 +69,6 @@ export default function Signup() {
     <div className="signup-container">
       <div className="signup-card">
         <div className="signup-logo-container">
-          <span className="signup-logo-emoji">📈</span>
           <h2 className="signup-title">Create Account</h2>
           <p className="signup-subtitle">Register to simulate custom distribution models</p>
         </div>
@@ -85,7 +83,7 @@ export default function Signup() {
             <input
               type="text"
               id="name"
-              placeholder="Deepak Kumar"
+              placeholder="Your name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required

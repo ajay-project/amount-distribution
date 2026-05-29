@@ -1,0 +1,5 @@
+/* Render SPA fallback — redirect all routes to index.html.
+   React Router then handles the URL on the client side.
+   Without this, Render's static server returns 404 for any
+   direct URL like /login, /dashboard, /verify-account, etc. */
+/* /index.html 200

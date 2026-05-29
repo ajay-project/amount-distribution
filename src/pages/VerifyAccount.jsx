@@ -2,11 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../hooks/useAuth";
-import {
-  validateSessionLimit,
-  revokeOldestSession,
-  createSession
-} from "../services/sessionService";
+// sessionService is dynamically imported at each call-site (same pattern as AuthContext)
+// to prevent Vite's mixed static+dynamic import warning and keep it out of the main bundle.
 import "../styles/VerifyAccount.css";
 
 /**
@@ -32,6 +29,7 @@ export default function VerifyAccount() {
   // Helper function to establish session record and update cache + auth context
   const proceedWithSessionCreation = async (userId, session, authUser, profileData) => {
     try {
+      const { createSession } = await import("../services/sessionService");
       const token = await createSession(userId);
 
       localStorage.removeItem("pending_verification_user");
@@ -75,6 +73,7 @@ export default function VerifyAccount() {
 
     try {
       // Terminate oldest session to make room
+      const { revokeOldestSession } = await import("../services/sessionService");
       await revokeOldestSession(userId);
 
       // Fetch profile
@@ -141,6 +140,7 @@ export default function VerifyAccount() {
         // ── APPROVED ──────────────────────────────────────────────────────────
         if (profileData?.approved === true) {
           // Enforce active session / screen limits
+          const { validateSessionLimit } = await import("../services/sessionService");
           const limitStatus = await validateSessionLimit(userId);
           if (!limitStatus.allowed) {
             setStatus("limit_reached");

@@ -41,4 +41,10 @@ export default defineConfig({
     host: true,
     allowedHosts: ['.trycloudflare.com'],
   },
+
+  preview: {
+    host: '0.0.0.0',
+    port: process.env.PORT || 4173,
+  },
 })
+

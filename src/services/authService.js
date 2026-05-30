@@ -1,4 +1,5 @@
 import { supabase } from "../lib/supabase";
+import { isCapacityAvailable } from "./platformCapacityService";
 
 /**
  * Authentication and User Management Services
@@ -12,6 +13,12 @@ import { supabase } from "../lib/supabase";
  * @param {string} name
  */
 export const signUpUser = async (email, password, name) => {
+  // 0. Check capacity first
+  const capacityAvailable = await isCapacityAvailable();
+  if (!capacityAvailable) {
+    throw new Error("CAPACITY_FULL");
+  }
+
   // 1. Check signup status via RPC function
   try {
     const { data: statusData, error: statusError } = await supabase.rpc(

@@ -7,6 +7,7 @@ import {
   revokeOldestSession,
   createSession
 } from "../services/sessionService";
+import { FEATURE_FLAGS } from "../config/featureFlags";
 import "../styles/VerifyAccount.css";
 
 /**
@@ -140,12 +141,19 @@ export default function VerifyAccount() {
 
         // ── APPROVED ──────────────────────────────────────────────────────────
         if (profileData?.approved === true) {
-          // Enforce active session / screen limits
-          const limitStatus = await validateSessionLimit(userId);
-          if (!limitStatus.allowed) {
-            setStatus("limit_reached");
-            setShowLimitModal(true);
-            return;
+          // PREMIUM FEATURE
+          // Advanced Multi-Device Enforcement
+          // Disabled via feature flag
+          // To re-enable:
+          // FEATURE_FLAGS.PREMIUM_DEVICE_ENFORCEMENT = true
+          if (FEATURE_FLAGS.PREMIUM_DEVICE_ENFORCEMENT) {
+            // Enforce active session / screen limits
+            const limitStatus = await validateSessionLimit(userId);
+            if (!limitStatus.allowed) {
+              setStatus("limit_reached");
+              setShowLimitModal(true);
+              return;
+            }
           }
 
           await proceedWithSessionCreation(userId, session, authUser, profileData);

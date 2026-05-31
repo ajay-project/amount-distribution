@@ -35,16 +35,13 @@ function readCache() {
 }
 
 function clearCache() {
-  localStorage.removeItem("sim_auth_session");
-  localStorage.removeItem("sim_auth_profile");
-  localStorage.removeItem("sim_verified_user");
-  localStorage.removeItem("sim_auth_verified_at");
-  localStorage.removeItem("pending_verification_user");
-  localStorage.removeItem("admin_auth_session");
-  localStorage.removeItem("admin_auth_profile");
-  localStorage.removeItem("admin_verified_user");
-  localStorage.removeItem("admin_auth_verified_at");
-  localStorage.removeItem("current_device_session_token");
+  const errorMsg = localStorage.getItem("login_error_message");
+  try {
+    localStorage.clear();
+  } catch (e) {}
+  if (errorMsg) {
+    localStorage.setItem("login_error_message", errorMsg);
+  }
   try {
     sessionStorage.clear();
   } catch (e) {}

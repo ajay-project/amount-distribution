@@ -240,8 +240,34 @@ function clearPersistedState(userId) {
   try {
     const key = getStorageKey(userId);
     localStorage.removeItem(key);
-  } catch {
-    // Silently fail
+    localStorage.removeItem("amt-dist-simulator-state");
+
+    const allowedKeys = [
+      "sim_auth_session",
+      "sim_auth_profile",
+      "sim_verified_user",
+      "sim_auth_verified_at",
+      "admin_auth_session",
+      "admin_auth_profile",
+      "admin_verified_user",
+      "admin_auth_verified_at",
+      "current_device_session_token",
+      "login_error_message"
+    ];
+
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const keyName = localStorage.key(i);
+      if (!keyName) continue;
+      
+      const isSupabase = keyName.startsWith("sb-");
+      const isAllowed = allowedKeys.includes(keyName);
+      
+      if (!isSupabase && !isAllowed) {
+        localStorage.removeItem(keyName);
+      }
+    }
+  } catch (err) {
+    console.error("Error clearing local storage:", err);
   }
 }
 
